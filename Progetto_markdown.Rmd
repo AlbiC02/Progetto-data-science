@@ -1,0 +1,434 @@
+---
+title: "L'energia in Italia"
+author: "Alberto Caschi"
+date: '2022-07-18'
+output: html_document
+---
+
+------------------------------------------------------------------------
+
+#### Introduzione
+
+Il progetto consiste in un'analisi dell'utilizzo in Italia di energia generata da fonti non rinnovabili e rinnovabili nel ventennio 2000-2020; il consumo delle due tipologie di energia è stato disaggregato sulla base dei materiali destinati alla produzione, nel primo caso, e delle fonti naturali impiegate, nel secondo caso. 
+E' stata inoltre analizzata la correlazione tra consumo di energia proveniente da fonti non rinnovabili e popolazione residente in Italia e successivamente è stata analizzata la correlazione tra l'utilizzo dei due diversi tipi di energia evidenziando il processo di transizione ecologica in atto nel periodo considerato
+.
+Le domande alla base dell'analisi svolta hanno riguardato le variazioni avvenute nell'ultimo ventennio nell'impiego di energie "pulite" rispetto a quelle tradizionali e la presenza di una correlazione tra i due impieghi.
+
+------------------------------------------------------------------------
+
+```{r include=FALSE}
+library(readr)
+
+world_energy <- read_csv("~/Desktop/Progetto scienza dei dati/global-material-flows-database.csv", skip = 1, col_names = c("country", "category", "flow_name", "flow_code", "flow_unit", 1970:2019))
+```
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+```{r include=FALSE}
+italy_energy <- world_energy %>%
+  filter(country == "Italy") %>%
+  select(-(flow_unit), -(country))
+
+italy_energy1 <- gather(italy_energy, c("1970":"2019"), key = "year", value = "tons")
+
+italy_energy1$year = as.numeric(as.character(italy_energy1$year))
+```
+
+#### Consumo dei materiali per produrre energia
+
+Il primo grafico rappresenta il consumo di combustibili fossili in Italia che dall'inizio del nuovo millennio ha cominciato a diminuire in maniera considerevole. 
+
+```{r, fig.width=10, fig.height=6, include = FALSE}
+library(ggplot2)
+
+material_cons <- function(material) {
+  full_join(filter(italy_energy1, category == material, flow_code == "RMC"), filter(italy_energy1, category == material, flow_code == "DMC"), by = "year") %>%
+    rename("tons_DMC" = "tons.x") %>% rename("tons_RMC" = "tons.y") %>% rename("category" = "category.x") %>%
+    select(category, year, tons_DMC, tons_RMC) %>%
+    mutate(tons_tot = tons_DMC + tons_RMC) %>%
+    ggplot(aes(x = year, y = tons_tot, group = 1)) +
+    labs(title = paste("Consumption of",material,"in Italy (1970 - 2019)"), x = "Anno", y = "Tonnellate") +
+    geom_point(alpha = 0.35) +
+    geom_line(alpha = 0.35) +
+    geom_smooth(se = FALSE, color = "darkred") +
+    theme_classic()
+}
+
+material_cons("Fossil fuels")
+```
+
+```{r, fig.width=10, fig.height=6, echo=FALSE, message=FALSE}
+full_join(filter(italy_energy1, category == "Fossil fuels", flow_code == "RMC"), filter(italy_energy1, category == "Fossil fuels", flow_code == "DMC"), by = "year") %>%
+    rename("tons_DMC" = "tons.x") %>% rename("tons_RMC" = "tons.y") %>% rename("category" = "category.x") %>%
+    select(category, year, tons_DMC, tons_RMC) %>%
+    filter(year >= 2000) %>%
+    mutate(tons_tot = tons_DMC + tons_RMC) %>%
+    ggplot(aes(x = year, y = tons_tot, group = 1)) +
+    labs(title = paste("Consumo di combustibili fossili in Italia (2000 - 2019)"), x = "Anno", y = "Tonnellate") +
+    geom_point(alpha = 0.35) +
+    geom_line(alpha = 0.35) +
+    geom_smooth(se = FALSE, color = "darkred") +
+    theme_classic()
+```
+
+```{r include=FALSE}
+library(readxl)
+
+renewable <- read_excel("~/Desktop/Progetto scienza dei dati/Data-file-Europe-Power-Sector-2020.xlsx")
+```
+
+```{r include=FALSE}
+renewable_italy <- renewable %>% 
+  select(Year, Area, Variable, "Generation (TWh)", "Share of production (%)") %>%
+  filter(Area == "Italy")
+```
+
+Il secondo grafico evidenzia che anche l'utilizzo del carbone subisce una considerevole diminuzione nell'ultimo periodo del ventennio 2000-2020.
+
+```{r message=FALSE, fig.width=10, fig.height=6, echo=FALSE, include = FALSE}
+ 
+energy_generation <- function(type) {
+  renewable_italy %>%
+    filter(Variable == type) %>%
+    ggplot(aes(x = Year, y = `Generation (TWh)`)) +
+    geom_point(alpha = 0.35) +
+    geom_line(alpha = 0.35) +
+    geom_smooth(se = FALSE, color = "brown") +
+    labs(title = paste(type, "energy generation"), x = "Anno", y = "Energia generata (TWh)") +
+    theme_classic()
+}
+
+energy_generation("Coal")
+```
+
+```{r message=FALSE, fig.width=10, fig.height=6, echo=FALSE}
+renewable_italy %>%
+    filter(Variable == "Coal") %>%
+    ggplot(aes(x = Year, y = `Generation (TWh)`)) +
+    geom_point(alpha = 0.35) +
+    geom_line(alpha = 0.35) +
+    geom_smooth(se = FALSE, color = "brown") +
+    labs(title = "Energia generata da carbone (TWh)", x = "Anno", y = "Energia generata (TWh)") +
+    theme_classic()
+```
+
+```{r include=FALSE}
+renewable_italy1 <- renewable_italy %>% 
+  select (- `Share of production (%)`) %>% select(- Area) %>%
+  pivot_wider(names_from = Variable, values_from = `Generation (TWh)`)
+
+renewable_italy1$Coal = rowSums(renewable_italy1[,c("Coal","Hard Coal")])
+
+renewable_italy1 <- renewable_italy1 %>% select(- `Hard Coal`)
+```
+
+```{r include=FALSE}
+renewable_italy1$`Non renewables` = rowSums(renewable_italy1[,c("Fossil", "Coal", "Lignite", "Gas", "Other fossil")])
+```
+
+Considerando in forma aggregata l'utilizzo di energia proveniente da materiali/fonti non rinnovabili e rappresentandolo graficamente, si conferma una diminuzione nel corso del ventennio come riscontrato precedentemente per il consumo di combustibili fossili e di carbone.
+
+```{r message=FALSE, fig.width=10, fig.height=6, echo=FALSE}
+ggplot(data = renewable_italy1, aes(x = Year, y = `Non renewables`)) +
+  geom_line(alpha = 0.5) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE, color = "brown") +
+  labs(title = "Utilizzo di energie non rinnovabili in Italia", x = "Anno", y = "Generazione di energia da fonti non rinnovabili (TWh)") +
+  theme_classic()
+```
+
+Nel dettaglio, le risorse non rinnovabili aggregate e analizzate nel grafico sono:
+
+-   Combustili fossili, tra cui il petrolio e suoi derivati;
+-   Carbone;
+-   Lignite (un materiale simile al carbone, originato dalla fossilizzazione di piante acquatiche);
+-   Gas naturale;
+-   Altre fonti non rinnovabili (tra cui antracite, litantrace e torba).
+
+Il grafico sottostante rappresenta l'utilizzo delle risorse sopraelencate in forma disaggregata negli anni presi in considerazione.
+
+```{r, fig.width=10, fig.height=6, echo=FALSE}
+renewable_italy1 %>% ggplot(aes(x = Year)) +
+  geom_point(aes(y = Fossil, color = "Combustibili fossili")) +
+  geom_point(aes(y = Coal, color = "Carbone")) +
+  geom_point(aes(y = Lignite, color = "Lignite")) +
+  geom_point(aes(y = Gas, color = "Gas")) +
+  geom_point(aes(y = `Other fossil`, color = "Altro")) +
+  geom_line(aes(y = Fossil, color = "Combustibili fossili")) +
+  geom_line(aes(y = Coal, color = "Carbone")) +
+  geom_line(aes(y = Lignite, color = "Lignite")) +
+  geom_line(aes(y = Gas, color = "Gas")) +
+  geom_line(aes(y = `Other fossil`, color = "Altro")) +
+  labs(title = "Utilizzo di fonti non rinnovabili in Italia", y = "Energia generata (TWh)", color = "Fonte") +
+  theme_classic()
+```
+
+Sulla base dei grafici rappresentati in precedenza ci si pone la seguente domanda:
+
+- come mai l'utilizzo di questi materiali è diminuito nel ventennio 2000-2020?
+
+Una risposta possibile è che la popolazione in Italia e l'utilizzo di energie alternative possano aver influito sull'utilizzo di questi materiali.
+
+Si è proceduto verificando:
+
+- se e che tipo di correlazione esiste tra utilizzo di energia da fonti non rinnovabili e variazione della popolazione;
+
+- se e che tipo di correlazione esiste tra utilizzo di energia da fonti non rinnovabili e rinnovabili.
+
+------------------------------------------------------------------------
+
+#### La popolazione in Italia
+
+Il seguente grafico rappresenta la popolazione in Italia dal 2000 al 2020. 
+L'obiettivo è quello di realizzare un modello per visualizzare la correlazione tra l'energia totale a disposizione e la popolazione totale in Italia.
+
+```{r include=FALSE}
+world_pop <- read_csv("~/Desktop/Progetto scienza dei dati/population.csv", skip = 3)
+```
+
+```{r include=FALSE}
+italy_pop <- world_pop %>%
+  filter(`Country Code` == "ITA") %>%
+  select(-(`Country Code`), -(`Indicator Name`), -(`Indicator Code`), -(...67)) %>%
+  gather(c("1960":"2021"), key = "year", value = "population") %>%
+  rename("Year" = "year")
+
+italy_pop$Year = as.numeric(as.character(italy_pop$Year))
+
+italy_pop
+```
+
+```{r, fig.width=10, fig.height=6, echo=FALSE}
+italy_pop %>% filter(Year >= 2000) %>% ggplot(aes(x = Year, y = population)) +
+  geom_point(color = "darkblue") +
+  geom_line(color = "darkblue") +
+  labs(title = "Popolazione in Italia negli anni", x = "Anno", y = "Popolazione") +
+  theme_classic()
+```
+
+Dalla visualizzazione di questo grafico si può evincere che la popolazione in Italia è diminuita negli ultimi anni. 
+
+Occorre determinare la correlazione esistente tra l'utilizzo di energia proveniente da fonti non rinnovabili e variazione della popolazione in Italia per comprendere se tale variazione ha influito o meno sulla diminuzione riscontrata in precedenza nell'utilizzo delle fonti "tradizionali" di energia.
+
+------------------------------------------------------------------------
+
+#### Modello
+
+Si dispone dunque un modello per verificare la correlazione tra le due variabili sopra indicate.
+
+```{r include=FALSE}
+library(modelr)
+
+r = cor(renewable_italy1$`Non renewables`, (italy_pop %>% filter(Year >= 2000 & Year <= 2020))$population)
+
+mod1 = lm(renewable_italy1$`Non renewables` ~ (italy_pop %>% filter(Year >= 2000 & Year <= 2020))$population)
+```
+
+```{r}
+r
+```
+
+La costante di Pearson rivela che in realtà non c'è correlazione tra le due variabili analizzate, cosa che si può constatare anche con la visualizzazione grafica del modello proposto.
+
+```{r, fig.width=10, fig.height=6, echo=FALSE}
+italy_energy_pop <- left_join(renewable_italy1, italy_pop, by = "Year")
+
+italy_energy_pop %>% ggplot(aes(x = population, y = `Non renewables`, color = Year)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(intercept = mod1$coefficients[1],
+              slope = mod1$coefficients[2], color = "red") +
+  labs(title = "", x = "Popolazione", y = "Utilizzo di risorse non rinnovabili (TWh)") +
+  theme_classic()
+```
+
+La diminuzione dell'utilizzo di energia non dipende dunque dalla variazione della popolazione in Italia. 
+
+A questo punto si procede per verificare se l'utilizzo di energia da fonti proveniente da fonti rinnovabili ha influito sulla diminuzione dell'utilizzo di energia non rinnovabile ovvero se tra le due varibili esiste una correlazione negativa.
+
+------------------------------------------------------------------------
+
+```{r include=FALSE}
+world_energy2 <- read_csv("~/Desktop/Progetto scienza dei dati/world_energy.csv")
+```
+
+```{r include=FALSE}
+italy_2_energy <- world_energy2 %>% filter(Country_Name == "Italy") %>%
+  select(- ends_with("Code")) %>% select(- starts_with("Period"))
+
+italy_2_energy1 <- italy_2_energy %>%
+  gather(c("1990":"2010"), key = "Year", value= "value")
+
+italy_2_energy2 <- pivot_wider(italy_2_energy1, names_from = Indicator_Name)
+
+italy_2_energy2$Year = as.numeric(as.character(italy_2_energy2$Year))
+```
+
+#### Le energie rinnovabili
+
+Il seguente grafico permette di visualizzare l'utilizzo di alcuni tipi di energia provenienti da fonti rinnovabili nel ventennio 1990-2010.
+
+```{r, fig.width=10, fig.height=6, echo=FALSE, message=FALSE}
+italy_2_energy2 %>% ggplot(aes(x = Year)) +
+  geom_point(aes (color = "Biogas", y = `Biogas consumption (TJ)`)) +
+  geom_line(aes (color = "Biogas", y = `Biogas consumption (TJ)`)) +
+  geom_point(aes (color = "Biomassa", y = `Modern biomass consumption (TJ)`)) +
+  geom_line(aes (color = "Biomassa", y = `Modern biomass consumption (TJ)`)) +
+  labs(y = "Energia generata (TJ)", title = "Consumo di biogas e biomassa", color = "Fonte", x = "Anno") +
+  theme_classic()
+```
+
+Prendendo in considerazione l'utilizzo nel tempo delle risorse rinnovabili in forma aggregata, otteniamo il seguente grafico:
+
+```{r message=FALSE, fig.width=10, fig.height=6, echo=FALSE}
+renewable_italy %>%
+    filter(Variable == "Renewables") %>%
+    ggplot(aes(x = Year, y = `Generation (TWh)`)) +
+    geom_point(alpha = 0.35) +
+    geom_line(alpha = 0.35) +
+    geom_smooth(se = FALSE, color = "blue") +
+    labs(title = "Energia generata da risorse rinnovabili (TWh) - (2000 - 2020)", x = "Anno", y = "Energia generata (TWh)") +
+    theme_classic()
+```
+
+Il grafico evidenzia un aumento considerevole dell'impiego di queste risorse dall'inizio del nuovo millennio.
+
+Considerando in forma disaggregata l'utilizzo di ogni singola fonte di energia rinnovabile nel periodo 2000-2020, si ottiene il seguente grafico:
+
+```{r, fig.width=10, fig.height=6, echo=FALSE}
+renewable_italy1 %>% ggplot(aes(x = Year)) +
+  geom_point(aes(y = `Other renewables`, color = "Altro")) +
+  geom_point(aes(y = Hydro, color = "Idroelettrica")) +
+  geom_point(aes(y = Solar, color = "Solare")) +
+  geom_point(aes(y = Wind, color = "Eolica")) +
+  geom_point(aes(y = Bioenergy, color = "Bioenergie")) +
+  geom_line(aes(y = `Other renewables`, color = "Altro")) +
+  geom_line(aes(y = Hydro, color = "Idroelettrica")) +
+  geom_line(aes(y = Solar, color = "Solare")) +
+  geom_line(aes(y = Wind, color = "Eolica")) +
+  geom_line(aes(y = Bioenergy, color = "Bioenergie")) +
+  labs(title = "Utilizzo di fonti rinnovabili in Italia", y = "Generazione di energia (TWh)", color = "Fonte") +
+  theme_classic()
+```
+
+Si nota come ci sia stato un incremento notevole nell'utilizzo di energie alternative (soprattutto quella solare) nel periodo 2010-2012; tale fenomento può essere collegato all'entrata in vigore nell'anno 2009 di una norma di legge che promuove l'utilizzo di energie rinnovabili su edifici di nuova costruzione:
+
+*I Comuni avranno un anno di tempo per inserire nei propri regolamenti edilizi l'obbligo di dotare le unità abitative e gli edifici industriali di nuova costruzione di impianti di energia da fonti rinnovabili in grado di garantire una produzione di almeno 1 kW.*
+
+Dal 2010 infatti gli edifici di nuova costruzione sono stati realizzati in conformità a tale norma e utilizzano prevalentemente l'energia solare.
+
+------------------------------------------------------------------------
+
+#### Modello
+
+A questo punto si può ipotizzare che la diminuzione di utilizzo di energia da fonti non rinnovabili possa essere correlata al crescente utilizzo di fonti di energia rinnovabili.
+
+```{r include=FALSE}
+r2 <- cor(renewable_italy1$Renewables, renewable_italy1$`Non renewables`)
+```
+
+```{r}
+r2
+```
+
+Dal valore della costante di Pearson si nota infatti che le due variabili sono effettivamente correlate negativamente.
+
+```{r include=FALSE}
+model = lm(`Non renewables` ~ Renewables, data = renewable_italy1)
+```
+
+Vengono riportati i coefficienti della retta che rappresenta il modello lineare.
+
+```{r}
+model$coefficients
+```
+
+Si visualizza dunque il grafico che rappresenta questa correlazione:
+
+```{r, fig.width=10, fig.height=6, echo=FALSE}
+renewable_italy1 %>% ggplot(aes(x = Renewables, y = `Non renewables`, color = Year)) +
+  geom_point() +
+  geom_line() +
+  geom_abline(intercept = model$coefficients[1],
+              slope = model$coefficients[2], color = "red") +
+  scale_color_gradient(low = "blue", high = "green") +
+  labs(title = "Consumo di energia non rinnovabile rispetto al consumo di energia rinnovabile", x = "Energia generata da fonti rinnovabili (TWh)", y = "Energia generata da fonti non rinnovabili (TWh)", color = "Anno") +
+  theme_classic()
+```
+
+```{r include=FALSE}
+renewable_italy1 <- add_residuals(renewable_italy1, model)
+```
+
+------------------------------------------------------------------------
+
+#### Previsioni
+
+La Direttiva UE del 2018 dispone che gli Stati membri provvedono collettivamente a far sì che, nel 2030, la quota di energia da fonti rinnovabili nel consumo finale lordo di energia dell'Unione sia almeno pari al 32% (articolo 1 e articolo 3, par. 1) e la quota di energia da fonti rinnovabili nei trasporti sia almeno pari al 14% del consumo finale in tale settore (articolo 25, par. 1).
+
+L'Italia ha attualmente già oltrepassato lo standard imposto dall'UE per il 2030, come si può visualizzare nel seguente grafico:
+
+```{r, fig.width=10, fig.height=6, echo=FALSE, message=FALSE}
+italy_demand_renewable = renewable_italy %>%
+  filter(Variable == "Demand" | Variable == "Renewables") %>%
+  select(- `Share of production (%)`) %>%
+  pivot_wider(names_from = Variable, values_from = `Generation (TWh)`) %>%
+  mutate(Ratio = (Renewables/Demand)*100)
+
+
+ggplot(italy_demand_renewable, aes(x = Year)) +
+  geom_area(aes(y = Demand), fill = "#ffe6e6") +
+  geom_line(aes(y = Demand, color = "Domanda totale"), alpha = 1) +
+  geom_point(aes(y = Demand), alpha = 1) +
+  geom_area(aes(y = Renewables), fill = "lightblue") +
+  geom_line(aes(y = Renewables, color = "Rinnovabili"), alpha = 1) +
+  geom_point(aes(y = Renewables), alpha = 1) +
+  geom_ref_line(h = 0) +
+  labs(y = "Domanda (TWh)", x = "Anno", color = "", title = "") +
+  theme_classic()
+```
+
+L'energia rinnovabile prodotta dall'Italia nel 2020 risulta essere **38,6%** della domanda totale.
+
+Com'è la situazione negli altri Paesi europei?
+
+```{r, fig.width=10, fig.height=6, echo=FALSE, message=FALSE, warning=FALSE}
+world_renewable <- renewable %>% select(- ends_with("(%)")) %>% select(- `Change on last year (TWh)`) %>%
+  pivot_wider(names_from = "Variable", values_from = "Generation (TWh)") %>%
+filter(Area != "EU-27") %>% filter(Area != "EU27+1")
+
+world_renewable$`Non_renewables` = rowSums(world_renewable[,c("Fossil", "Coal", "Lignite", "Gas", "Other fossil")])
+
+world_renewable1 <- world_renewable %>% mutate(Ratio = (Renewables/Demand)*100) %>%
+  select(Year, Area, Renewables, Demand, Ratio)
+
+library(gganimate)
+
+world_renewable1 %>% ggplot(aes(x = Area, y = Ratio, color = Area)) +
+  geom_ref_line(h = 32, colour = "black", size = 0.4) +
+  geom_point(aes(size = 2)) +
+  theme_minimal() +
+  scale_x_discrete(labels = c("Austria","","","","","Czech Republic","","","","","Germany","","","","Italy","","","","","Netherlands","","","","","Slovenia","","","UK")) +
+  transition_states(Year, transition_length = 1, state_length = 0) +
+  labs(y = "Produzione di energia rinnovabile rispetto alla domanda (%)", x = "", color = "Paesi", title = paste("L'energia in Europa (", "{closest_state}", ")")) +
+  guides(color = "legend", size = "none")
+```
+
+------------------------------------------------------------------------
+
+### [Fonti]{.underline}
+
+#### Datasets
+
+-   [Link al primo dataset (materiali utilizzati nel mondo)](https://energydata.info/dataset/world-unep-irp-global-material-flows-database)
+-   [Link al secondo dataset (popolazione mondiale)](https://data.worldbank.org/indicator/SP.POP.DPND?end=2021&start=1960&view=chart)
+-   [Link al terzo dataset (fonti rinnovabili e non rinnovabili - 1)](https://energydata.info/dataset/se4all-database/resource/f779714e-d97f-4f57-a61f-057f5496d06f)
+-   [Link al quarto dataset (fonti rinnovabili e non rinnovabili - 2)](https://data.world/makeovermonday/2021w5)
+
+#### Websites
+
+-   [Energie rinnovabili - sviluppo economico e politiche energetiche](https://temi.camera.it/leg18/temi/tl18_fonti_rinnovabili#agenda2030)
+-   [Energie rinnovabili: cosa sono, esempi e ricerca in Italia](https://ilgiornaledellambiente.it/energie-rinnovabili-italia/)
+-   [I principali contenuti della Direttiva UE, obiettivi per il 2030](https://temi.camera.it/leg18/post/i-principali-contenuti-della-direttiva-red-ii.html)
